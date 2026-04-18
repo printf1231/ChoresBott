@@ -4,7 +4,7 @@ import { Chat } from './models/chat'
 import { initChat } from './external/chat'
 
 import { DB } from './models/db'
-import { pgDB } from './external/db'
+import { fileDB } from './external/filedb'
 
 import log from './utility/log'
 
@@ -13,8 +13,6 @@ import { asyncLoop } from './utility/async'
 
 import { Action } from './models/actions'
 import { Config } from './models/config'
-
-import { emptyDB as mockDB, chat as mockChat } from './utility/mocks'
 
 import { loop, messageHandler } from './logic/main'
 import { parseTime } from './logic/time'
@@ -27,7 +25,8 @@ import path from 'path'
     // --- Config ---
     const serverPort: string = process.env.PORT || '80'
     const clientUrlRoot: string = process.env.URL || `localhost:${serverPort}`
-    const dbConnectionString = process.env.POSTGRESQL_ADDON_URI || ''
+    const dataFilePath: string =
+        process.env.DATA_FILE || './data/choresbot.json'
     const frequencyString = process.env.FREQUENCY || '120'
     let frequency = parseInt(frequencyString, 10)
     if (isNaN(frequency)) {
@@ -35,7 +34,6 @@ import path from 'path'
     }
     const channel = process.env.DISCORD_CHANNEL || 'chores'
     const token = process.env.DISCORD_TOKEN || ''
-    const debugFlag = isEnvFlagSet('DEBUG')
     const verboseFlag = isEnvFlagSet('VERBOSE')
 
     let morningTime: Date | undefined
@@ -43,9 +41,6 @@ import path from 'path'
         morningTime = parseTime(process.env.MORNING_TIME)
     }
     if (morningTime === undefined) {
-        // check `morningTime` is undefined instead of
-        // `process.env.MORNING_TIME` to handle the case that
-        // `MORNING_TIME` was set but was an invalid format
         morningTime = parseTime('7:00 AM')
     }
 
@@ -60,37 +55,28 @@ import path from 'path'
     const config: Config = {
         morningTime,
         nightTime,
-        debug: debugFlag,
+        debug: false,
         verbose: verboseFlag,
         clientUrlRoot,
         discordChannel: channel
     }
 
     // --- External Services ---
-    let db: DB
-    let chat: Chat
-    if (config.debug) {
-        db = mockDB
-        chat = mockChat
-    } else {
-        const pgdb = await pgDB(dbConnectionString)
-        db = pgdb
-        await pgdb.initDB()
+    const db: DB = fileDB(dataFilePath)
 
-        chat = await initChat(config, async (msg) => {
-            const actions = await messageHandler(msg, db, config).catch((e) => {
-                log(`Error in message handler!: ${e}`, config)
-                return []
-            })
-
-            log(`message actions: ${JSON.stringify(actions)}`, config)
-            await performActions(actions, chat, db).catch((e) => {
-                log(`Error performing actions!: ${e}`, config)
-            })
+    const chat: Chat = await initChat(config, async (msg) => {
+        const actions = await messageHandler(msg, db, config).catch((e) => {
+            log(`Error in message handler!: ${e}`, config)
+            return []
         })
 
-        await chat.login(token)
-    }
+        log(`message actions: ${JSON.stringify(actions)}`, config)
+        await performActions(actions, chat, db).catch((e) => {
+            log(`Error performing actions!: ${e}`, config)
+        })
+    })
+
+    await chat.login(token)
 
     // --- Chat Bot ---
     asyncLoop(
@@ -121,8 +107,6 @@ import path from 'path'
     app.get(routes.choreInfoAPI, serveChoreInfo.bind(null, db))
 
     app.get('*', function (req, res, next) {
-        // fallback to serve index.html for all other requests
-        // (react router will handle individual pages)
         const options = {
             root: path.join(__dirname, '..', 'client/dist')
         }
@@ -144,8 +128,6 @@ async function performActions(
     chat: Chat,
     db: DB
 ): Promise<void> {
-    // Note: If one action fails the following actions won't be performed
-
     for (const action of actions) {
         switch (action.kind) {
             case 'SendMessage': {

@@ -33,11 +33,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const chat_1 = require("./external/chat");
-const db_1 = require("./external/db");
+const filedb_1 = require("./external/filedb");
 const log_1 = __importDefault(require("./utility/log"));
 const env_1 = require("./utility/env");
 const async_1 = require("./utility/async");
-const mocks_1 = require("./utility/mocks");
 const main_1 = require("./logic/main");
 const time_1 = require("./logic/time");
 const routes = __importStar(require("./routes"));
@@ -48,7 +47,7 @@ const path_1 = __importDefault(require("path"));
     // --- Config ---
     const serverPort = process.env.PORT || '80';
     const clientUrlRoot = process.env.URL || `localhost:${serverPort}`;
-    const dbConnectionString = process.env.POSTGRESQL_ADDON_URI || '';
+    const dataFilePath = process.env.DATA_FILE || './data/choresbot.json';
     const frequencyString = process.env.FREQUENCY || '120';
     let frequency = parseInt(frequencyString, 10);
     if (isNaN(frequency)) {
@@ -56,16 +55,12 @@ const path_1 = __importDefault(require("path"));
     }
     const channel = process.env.DISCORD_CHANNEL || 'chores';
     const token = process.env.DISCORD_TOKEN || '';
-    const debugFlag = (0, env_1.isEnvFlagSet)('DEBUG');
     const verboseFlag = (0, env_1.isEnvFlagSet)('VERBOSE');
     let morningTime;
     if (process.env.MORNING_TIME !== undefined) {
         morningTime = (0, time_1.parseTime)(process.env.MORNING_TIME);
     }
     if (morningTime === undefined) {
-        // check `morningTime` is undefined instead of
-        // `process.env.MORNING_TIME` to handle the case that
-        // `MORNING_TIME` was set but was an invalid format
         morningTime = (0, time_1.parseTime)('7:00 AM');
     }
     let nightTime;
@@ -78,34 +73,24 @@ const path_1 = __importDefault(require("path"));
     const config = {
         morningTime,
         nightTime,
-        debug: debugFlag,
+        debug: false,
         verbose: verboseFlag,
         clientUrlRoot,
         discordChannel: channel
     };
     // --- External Services ---
-    let db;
-    let chat;
-    if (config.debug) {
-        db = mocks_1.emptyDB;
-        chat = mocks_1.chat;
-    }
-    else {
-        const pgdb = yield (0, db_1.pgDB)(dbConnectionString);
-        db = pgdb;
-        yield pgdb.initDB();
-        chat = yield (0, chat_1.initChat)(config, (msg) => __awaiter(void 0, void 0, void 0, function* () {
-            const actions = yield (0, main_1.messageHandler)(msg, db, config).catch((e) => {
-                (0, log_1.default)(`Error in message handler!: ${e}`, config);
-                return [];
-            });
-            (0, log_1.default)(`message actions: ${JSON.stringify(actions)}`, config);
-            yield performActions(actions, chat, db).catch((e) => {
-                (0, log_1.default)(`Error performing actions!: ${e}`, config);
-            });
-        }));
-        yield chat.login(token);
-    }
+    const db = (0, filedb_1.fileDB)(dataFilePath);
+    const chat = yield (0, chat_1.initChat)(config, (msg) => __awaiter(void 0, void 0, void 0, function* () {
+        const actions = yield (0, main_1.messageHandler)(msg, db, config).catch((e) => {
+            (0, log_1.default)(`Error in message handler!: ${e}`, config);
+            return [];
+        });
+        (0, log_1.default)(`message actions: ${JSON.stringify(actions)}`, config);
+        yield performActions(actions, chat, db).catch((e) => {
+            (0, log_1.default)(`Error performing actions!: ${e}`, config);
+        });
+    }));
+    yield chat.login(token);
     // --- Chat Bot ---
     (0, async_1.asyncLoop)(() => __awaiter(void 0, void 0, void 0, function* () {
         const actions = yield (0, main_1.loop)(db, config).catch((e) => {
@@ -124,8 +109,6 @@ const path_1 = __importDefault(require("path"));
     app.get(routes.choresListAPI, chores_list_1.default.bind(null, db));
     app.get(routes.choreInfoAPI, chore_info_1.default.bind(null, db));
     app.get('*', function (req, res, next) {
-        // fallback to serve index.html for all other requests
-        // (react router will handle individual pages)
         const options = {
             root: path_1.default.join(__dirname, '..', 'client/dist')
         };
@@ -141,7 +124,6 @@ const path_1 = __importDefault(require("path"));
 }))();
 function performActions(actions, chat, db) {
     return __awaiter(this, void 0, void 0, function* () {
-        // Note: If one action fails the following actions won't be performed
         for (const action of actions) {
             switch (action.kind) {
                 case 'SendMessage': {

@@ -28,29 +28,32 @@ dist/          - Compiled server output
 
 ## Running
 
-- **Dev (DEBUG mode, mock DB/chat)**: `cross-env DEBUG=true PORT=5000 node .`
+- **Start**: `npm run build && PORT=5000 node .`
 - **Build**: `npm run build` (lints + compiles TypeScript)
 - **Workflow**: "Start application" runs on port 5000
 
+## Storage
+
+Uses a JSON file at `./data/choresbot.json` (auto-created on first write). No database required. Path configurable via `DATA_FILE` env var.
+
 ## Environment Variables
 
-| Variable              | Description                                      | Default          |
-|-----------------------|--------------------------------------------------|------------------|
-| DISCORD_TOKEN         | Discord bot token                                | (required)       |
-| DISCORD_CHANNEL       | Channel name to listen in                        | chores           |
-| POSTGRESQL_ADDON_URI  | PostgreSQL connection string                     | (required)       |
-| PORT                  | Web server port                                  | 80               |
-| FREQUENCY             | Chore check interval (seconds)                   | 120              |
-| DEBUG                 | Use mock DB/chat (no real credentials needed)    | false            |
-| VERBOSE               | Enable verbose logging                           | false            |
-| LOCALE                | Date/time locale                                 | en-US            |
-| TIMEZONE              | Timezone for display                             | America/New_York |
-| MORNING_TIME          | Start assigning chores                           | 7:00 AM          |
-| NIGHT_TIME            | Stop assigning chores                            | 11:00 PM         |
-| URL                   | Server URL for links                             | localhost        |
+| Variable         | Description                          | Default                    |
+|------------------|--------------------------------------|----------------------------|
+| DISCORD_TOKEN    | Discord bot token (secret)           | (required)                 |
+| DISCORD_CHANNEL  | Channel name to listen in            | chores                     |
+| DATA_FILE        | Path to JSON data file               | ./data/choresbot.json      |
+| PORT             | Web server port                      | 80                         |
+| FREQUENCY        | Chore check interval (seconds)       | 120                        |
+| VERBOSE          | Enable verbose logging               | false                      |
+| LOCALE           | Date/time locale                     | en-US                      |
+| TIMEZONE         | Timezone for display                 | America/New_York           |
+| MORNING_TIME     | Start assigning chores               | 7:00 AM                    |
+| NIGHT_TIME       | Stop assigning chores                | 11:00 PM                   |
+| URL              | Server URL for links                 | localhost                  |
 
 ## Notes
 
-- In DEBUG mode, uses in-memory mock data — no Discord token or DB needed
-- Production deployment requires DISCORD_TOKEN and POSTGRESQL_ADDON_URI
+- No Postgres needed — all data stored in a JSON file
+- DISCORD_TOKEN is stored as a Replit secret
 - Deployment target: VM (always running, needed for Discord bot)
