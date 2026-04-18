@@ -3,9 +3,8 @@ import { Action } from '../models/actions'
 import { Chore } from '../models/chores'
 import { Command } from '../models/commands'
 import { ReadOnlyDB } from '../models/db'
-import { tagUser, inlineCode, hyperlink, bold } from '../external/chat'
+import { tagUser, inlineCode, bold } from '../external/chat'
 import log from '../utility/log'
-import * as routes from '../routes'
 import { bestMatch } from '../utility/strings'
 import { frequencyToString, parseFrequency } from './time'
 import {
@@ -469,16 +468,42 @@ chore-name:
 
 export const ListCommand: Command = {
     callsigns: ['!list', '!chores', '!all'],
-    summary: '📝 Get a list of all chores',
-    handler: async (message, config) => {
+    summary: '📝 Get a list of all chores and their current assignment status',
+    handler: async (message, config, db) => {
+        const choreNames = await db.getAllChoreNames()
+
+        if (choreNames.length === 0) {
+            return [
+                {
+                    kind: 'SendMessage',
+                    message: {
+                        text: `📝 ${tagUser(
+                            message.author
+                        )} No chores have been added yet. Use ${inlineCode(
+                            '!add'
+                        )} to create one!`,
+                        author: ChoresBotUser
+                    }
+                }
+            ]
+        }
+
+        const lines: string[] = []
+        for (const name of choreNames) {
+            const chore = await db.getChoreByName(name)
+            if (!chore) continue
+            if (chore.assigned !== false) {
+                lines.push(`• ${name} — 👤 ${tagUser(chore.assigned)}`)
+            } else {
+                lines.push(`• ${name} — ✅ unassigned`)
+            }
+        }
+
         return [
             {
                 kind: 'SendMessage',
                 message: {
-                    text: `📝 A list of all chores is available ${hyperlink(
-                        'here',
-                        `${config.clientUrlRoot}${routes.choresListPage}`
-                    )}`,
+                    text: `📝 ${bold('All Chores')}:\n${lines.join('\n')}`,
                     author: ChoresBotUser
                 }
             }

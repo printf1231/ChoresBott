@@ -1,23 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -35,7 +16,6 @@ exports.defaultCallsign = exports.AllCommands = exports.HelpCommand = exports.Op
 const chat_1 = require("../models/chat");
 const chat_2 = require("../external/chat");
 const log_1 = __importDefault(require("../utility/log"));
-const routes = __importStar(require("../routes"));
 const strings_1 = require("../utility/strings");
 const time_1 = require("./time");
 const actions_1 = require("./actions");
@@ -391,13 +371,37 @@ chore-name:
 };
 exports.ListCommand = {
     callsigns: ['!list', '!chores', '!all'],
-    summary: '📝 Get a list of all chores',
-    handler: (message, config) => __awaiter(void 0, void 0, void 0, function* () {
+    summary: '📝 Get a list of all chores and their current assignment status',
+    handler: (message, config, db) => __awaiter(void 0, void 0, void 0, function* () {
+        const choreNames = yield db.getAllChoreNames();
+        if (choreNames.length === 0) {
+            return [
+                {
+                    kind: 'SendMessage',
+                    message: {
+                        text: `📝 ${(0, chat_2.tagUser)(message.author)} No chores have been added yet. Use ${(0, chat_2.inlineCode)('!add')} to create one!`,
+                        author: chat_1.ChoresBotUser
+                    }
+                }
+            ];
+        }
+        const lines = [];
+        for (const name of choreNames) {
+            const chore = yield db.getChoreByName(name);
+            if (!chore)
+                continue;
+            if (chore.assigned !== false) {
+                lines.push(`• ${name} — 👤 ${(0, chat_2.tagUser)(chore.assigned)}`);
+            }
+            else {
+                lines.push(`• ${name} — ✅ unassigned`);
+            }
+        }
         return [
             {
                 kind: 'SendMessage',
                 message: {
-                    text: `📝 A list of all chores is available ${(0, chat_2.hyperlink)('here', `${config.clientUrlRoot}${routes.choresListPage}`)}`,
+                    text: `📝 ${(0, chat_2.bold)('All Chores')}:\n${lines.join('\n')}`,
                     author: chat_1.ChoresBotUser
                 }
             }

@@ -8,7 +8,7 @@
   "chores": [
     {
       "name": "pangaldaw",
-      "assigned": "442326550348824586",
+      "assigned": false,
       "frequency": {
         "kind": "Daily",
         "time": "2026-04-18T16:00:00.000Z"
@@ -17,7 +17,7 @@
     },
     {
       "name": "pammigat",
-      "assigned": false,
+      "assigned": "442326550348824586",
       "frequency": {
         "kind": "Daily",
         "time": "2026-04-18T13:00:00.000Z"
@@ -34,6 +34,12 @@
       "skippedBy": []
     }
   ],
-  "completions": [],
+  "completions": [
+    {
+      "choreName": "pangaldaw",
+      "by": "442326550348824586",
+      "at": "2026-04-18T12:36:58.906Z"
+    }
+  ],
   "config": {}
 }
