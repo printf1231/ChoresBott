@@ -31,7 +31,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defaultCallsign = exports.AllCommands = exports.HelpCommand = exports.OptOutCommand = exports.OptInCommand = exports.InfoCommand = exports.ListCommand = exports.DeleteCommand = exports.AddCommand = exports.CompleteCommand = exports.SkipCommand = exports.RequestCommand = exports.PingCommand = void 0;
+exports.defaultCallsign = exports.AllCommands = exports.HelpCommand = exports.OptOutCommand = exports.OptInCommand = exports.InfoCommand = exports.ListCommand = exports.DeleteCommand = exports.AddCommand = exports.StatusCommand = exports.CompleteCommand = exports.SkipCommand = exports.RequestCommand = exports.AssignCommand = exports.PingCommand = void 0;
 const chat_1 = require("../models/chat");
 const chat_2 = require("../external/chat");
 const log_1 = __importDefault(require("../utility/log"));
@@ -41,15 +41,105 @@ const time_1 = require("./time");
 const actions_1 = require("./actions");
 const chores_1 = require("./chores");
 // NOTE: If you add a new command, be sure to add it to the `AllCommands` array
+// Parse a Discord user mention like <@123456> or <@!123456> and return the user ID
+function parseMention(text) {
+    const match = text.match(/^<@!?(\d+)>/);
+    return match ? match[1] : undefined;
+}
 exports.PingCommand = {
     callsigns: ['ping', '!ping'],
-    summary: 'Bot responds with "pong", useful diagnostic to check if ChoresBot is running.',
+    summary: '🏓 Bot responds with "pong", useful diagnostic to check if ChoresBot is running.',
     handler: () => __awaiter(void 0, void 0, void 0, function* () {
         return [
             {
                 kind: 'SendMessage',
                 message: {
-                    text: 'pong',
+                    text: '🏓 pong!',
+                    author: chat_1.ChoresBotUser
+                }
+            }
+        ];
+    })
+};
+exports.AssignCommand = {
+    callsigns: ['!assign'],
+    minArgumentCount: 2,
+    summary: '📌 Assign a chore directly to a member — !assign @member chore-name',
+    helpText: `!assign @member chore-name
+
+@member:
+    The Discord mention of the member you want to assign the chore to (e.g. @John).
+    They must have opted in with !opt-in first.
+
+chore-name:
+    The name of the chore to assign.
+
+e.g.
+!assign @John vacuum the living room
+!assign @Jane take out trash`,
+    handler: (message, config, db, commandArgs) => __awaiter(void 0, void 0, void 0, function* () {
+        // Extract the mention at the start of args
+        const mentionMatch = commandArgs.match(/^(<@!?\d+>)\s+(.+)$/);
+        if (!mentionMatch) {
+            return [
+                {
+                    kind: 'SendMessage',
+                    message: {
+                        text: exports.AssignCommand.helpText ||
+                            'Invalid format. Usage: !assign @member chore-name',
+                        author: chat_1.ChoresBotUser
+                    }
+                }
+            ];
+        }
+        const mentionStr = mentionMatch[1];
+        const choreName = mentionMatch[2].trim();
+        const targetUserId = parseMention(mentionStr);
+        if (!targetUserId) {
+            return [
+                {
+                    kind: 'SendMessage',
+                    message: {
+                        text: `❌ ${(0, chat_2.tagUser)(message.author)} Could not parse that user mention. Try @mentioning them directly.`,
+                        author: chat_1.ChoresBotUser
+                    }
+                }
+            ];
+        }
+        const targetUser = yield db.getUserByID(targetUserId);
+        if (!targetUser) {
+            return [
+                {
+                    kind: 'SendMessage',
+                    message: {
+                        text: `❌ ${(0, chat_2.tagUser)(message.author)} That member hasn't opted in yet. They need to use ${(0, chat_2.inlineCode)('!opt-in')} first.`,
+                        author: chat_1.ChoresBotUser
+                    }
+                }
+            ];
+        }
+        let chore;
+        try {
+            chore = yield db.getChoreByName(choreName);
+        }
+        catch (e) {
+            (0, log_1.default)(`error retrieving chore "${choreName}": ${e}`, config);
+        }
+        if (!chore) {
+            return [
+                (0, actions_1.didYouMeanMessage)(choreName, yield getClosestChoreName(choreName, db), exports.AssignCommand, message.author)
+            ];
+        }
+        const updatedChore = (0, chores_1.assignChore)(chore, targetUser);
+        return [
+            {
+                kind: 'ModifyChore',
+                chore: updatedChore
+            },
+            {
+                kind: 'SendMessage',
+                message: {
+                    text: `📌 ${(0, chat_2.tagUser)(message.author)} has assigned "${chore.name}" to ${(0, chat_2.tagUser)(targetUser)}! Good luck! 💪`,
                     author: chat_1.ChoresBotUser
                 }
             }
@@ -58,7 +148,7 @@ exports.PingCommand = {
 };
 exports.RequestCommand = {
     callsigns: ['!request'],
-    summary: 'Request a new chore early',
+    summary: '🙋 Request a new chore for yourself',
     handler: (message, config, db) => __awaiter(void 0, void 0, void 0, function* () {
         const userAssignedChores = yield db.getChoresAssignedToUser(message.author);
         if (userAssignedChores.length > 0) {
@@ -67,7 +157,7 @@ exports.RequestCommand = {
                 {
                     kind: 'SendMessage',
                     message: {
-                        text: `${(0, chat_2.tagUser)(message.author)} you are already assigned the chore "${mostUrgentChore.name}". ` +
+                        text: `⚠️ ${(0, chat_2.tagUser)(message.author)} you are already assigned the chore "${mostUrgentChore.name}". ` +
                             `If you would like to skip you can use the ${(0, chat_2.inlineCode)(defaultCallsign(exports.SkipCommand))} command`,
                         author: chat_1.ChoresBotUser
                     }
@@ -80,7 +170,7 @@ exports.RequestCommand = {
                 {
                     kind: 'SendMessage',
                     message: {
-                        text: `✨ ${(0, chat_2.tagUser)(message.author)} there are no upcoming chores ✨`,
+                        text: `✨ ${(0, chat_2.tagUser)(message.author)} there are no upcoming chores — you're all caught up! 🎉`,
                         author: chat_1.ChoresBotUser
                     }
                 }
@@ -104,13 +194,12 @@ exports.RequestCommand = {
 };
 exports.SkipCommand = {
     callsigns: ['!skip'],
-    summary: 'Skip a chore, you will not be assigned to it again until another user completes it',
+    summary: '⏭️ Skip your currently assigned chore',
     helpText: `!skip
 
-Skips your currently assigned chore. You will not be re-assigned this chore again until it has been completed.`,
+Skips your currently assigned chore. You will not be re-assigned this chore again until it has been completed by someone else.`,
     handler: (message, config, db) => __awaiter(void 0, void 0, void 0, function* () {
         const userAssignedChores = yield db.getChoresAssignedToUser(message.author);
-        // check if the user is able to skip
         if (userAssignedChores.length === 0) {
             return [
                 {
@@ -123,7 +212,6 @@ Skips your currently assigned chore. You will not be re-assigned this chore agai
                 }
             ];
         }
-        // skip the chore
         const choreToSkip = userAssignedChores[0];
         return [
             {
@@ -133,7 +221,7 @@ Skips your currently assigned chore. You will not be re-assigned this chore agai
             {
                 kind: 'SendMessage',
                 message: {
-                    text: `⏭ the chore "${choreToSkip.name}" has been successfully skipped`,
+                    text: `⏭️ ${(0, chat_2.tagUser)(message.author)} skipped the chore "${choreToSkip.name}"`,
                     author: chat_1.ChoresBotUser
                 }
             }
@@ -141,9 +229,9 @@ Skips your currently assigned chore. You will not be re-assigned this chore agai
     })
 };
 exports.CompleteCommand = {
-    callsigns: ['!complete', '!completed'],
-    summary: 'Mark a chore as completed',
-    helpText: `!complete chore-name
+    callsigns: ['!complete', '!completed', '!done'],
+    summary: '✅ Mark a chore as completed',
+    helpText: `!complete [chore-name]
 
 chore-name:
     Optional.
@@ -157,13 +245,47 @@ Note: you do not need to be assigned to a chore to complete it`,
         return completeChoreByName(commandArgs, message.author, db);
     })
 };
+exports.StatusCommand = {
+    callsigns: ['!status', '!uncompleted', '!overdue'],
+    summary: '📋 Show all currently assigned (uncompleted) chores',
+    handler: (message, config, db) => __awaiter(void 0, void 0, void 0, function* () {
+        const assignedChores = yield db.getAllAssignedChores();
+        if (assignedChores.length === 0) {
+            return [
+                {
+                    kind: 'SendMessage',
+                    message: {
+                        text: `🎉 ${(0, chat_2.tagUser)(message.author)} No chores are currently assigned — everything is done! 🌟`,
+                        author: chat_1.ChoresBotUser
+                    }
+                }
+            ];
+        }
+        const lines = assignedChores
+            .map((chore) => {
+            if (chore.assigned === false)
+                return '';
+            return `❗ "${chore.name}" → ${(0, chat_2.tagUser)(chore.assigned)}`;
+        })
+            .filter(Boolean);
+        return [
+            {
+                kind: 'SendMessage',
+                message: {
+                    text: `📋 ${(0, chat_2.bold)('UNCOMPLETED CHORES')}:\n${lines.join('\n')}`,
+                    author: chat_1.ChoresBotUser
+                }
+            }
+        ];
+    })
+};
 exports.AddCommand = {
     callsigns: ['!add'],
-    summary: 'Add a new chore',
+    summary: '➕ Add a new chore',
     helpText: `!add chore-name frequency
 
 chore-name:
-    The name of the chore. Shown when being assigned, completed, etc. Should be something that clearly describes the chore.
+    The name of the chore. Shown when being assigned, completed, etc.
     Note: don't use the @ symbol in the name
 
 frequency:
@@ -173,10 +295,6 @@ frequency:
         Monthly @ <day/time>
         Yearly @ <date>
         Once @ <date/time>
-
-Notes:
-- Adding a chore that already exists will override its frequency.
-- Adding a chore that was deleted will make it available again. Previous completions will still be shown.
 
 e.g.
 !add walk the cat Daily @ 9:00 AM
@@ -188,9 +306,6 @@ e.g.
     handler: (message, config, db, commandArgs) => __awaiter(void 0, void 0, void 0, function* () {
         const words = commandArgs.split(' ');
         const atSignIndex = words.indexOf('@');
-        // there must be a keyword before the @
-        // and the name of the chore needs to be before the @
-        // so the index must be at least 2
         if (atSignIndex === -1 || atSignIndex < 2) {
             (0, log_1.default)(`invalid command format for !add command: ${commandArgs}`, config);
             return [
@@ -213,7 +328,7 @@ e.g.
                 {
                     kind: 'SendMessage',
                     message: {
-                        text: 'Error: unable to parse the frequency (see logs)',
+                        text: '❌ Error: unable to parse the frequency (see logs)',
                         author: chat_1.ChoresBotUser
                     }
                 }
@@ -231,7 +346,7 @@ e.g.
             {
                 kind: 'SendMessage',
                 message: {
-                    text: `➕ ${(0, chat_2.tagUser)(message.author)} new chore '${choreName}' successfully added with frequency '${(0, time_1.frequencyToString)(frequency)}' ➕`,
+                    text: `➕ ${(0, chat_2.tagUser)(message.author)} new chore "${choreName}" added with frequency "${(0, time_1.frequencyToString)(frequency)}" ✅`,
                     author: chat_1.ChoresBotUser
                 }
             }
@@ -241,22 +356,18 @@ e.g.
 exports.DeleteCommand = {
     callsigns: ['!delete'],
     minArgumentCount: 1,
-    summary: 'Delete an existing chore',
+    summary: '🗑️ Delete an existing chore',
     helpText: `!delete chore-name
 
 chore-name:
-    The name of the chore. Shown when being assigned, completed, etc.
-
-Note: although the chore will no longer be accesible or assignable the database will still have records of it and its completions.`,
+    The name of the chore to delete.`,
     handler: (message, config, db, choreName) => __awaiter(void 0, void 0, void 0, function* () {
-        // check if chore exists, maybe it was misspelled
         let chore;
         try {
             chore = yield db.getChoreByName(choreName);
         }
         catch (e) {
             (0, log_1.default)(`error retrieving chore "${choreName}": ${e}`, config);
-            // don't re-throw so user gets more specific message
         }
         if (chore === undefined) {
             return [
@@ -271,7 +382,7 @@ Note: although the chore will no longer be accesible or assignable the database 
             {
                 kind: 'SendMessage',
                 message: {
-                    text: `➖ ${(0, chat_2.tagUser)(message.author)} chore '${choreName}' successfully deleted ➖`,
+                    text: `🗑️ ${(0, chat_2.tagUser)(message.author)} chore "${choreName}" has been deleted`,
                     author: chat_1.ChoresBotUser
                 }
             }
@@ -280,13 +391,13 @@ Note: although the chore will no longer be accesible or assignable the database 
 };
 exports.ListCommand = {
     callsigns: ['!list', '!chores', '!all'],
-    summary: 'Get a list of all chores',
+    summary: '📝 Get a list of all chores',
     handler: (message, config) => __awaiter(void 0, void 0, void 0, function* () {
         return [
             {
                 kind: 'SendMessage',
                 message: {
-                    text: `A list of all chores is available ${(0, chat_2.hyperlink)('here', `${config.clientUrlRoot}${routes.choresListPage}`)}`,
+                    text: `📝 A list of all chores is available ${(0, chat_2.hyperlink)('here', `${config.clientUrlRoot}${routes.choresListPage}`)}`,
                     author: chat_1.ChoresBotUser
                 }
             }
@@ -295,25 +406,22 @@ exports.ListCommand = {
 };
 exports.InfoCommand = {
     callsigns: ['!info'],
-    summary: 'Get information on a chore',
-    helpText: `!info chore-name
+    summary: 'ℹ️ Get information on a chore',
+    helpText: `!info [chore-name]
 
 chore-name:
     Optional.
-    The name of the chore you want info on. If no name is provided then your currently assigned chore is used.
-
-Note: If a chore matching the name you supplied can't be found then the closest match will be shown instead. This can be helpful to check the spelling of a chore's name.`,
+    The name of the chore you want info on. If no name is provided then your currently assigned chore is used.`,
     handler: (message, config, db, choreName) => __awaiter(void 0, void 0, void 0, function* () {
         let chore;
         if (choreName === '') {
-            // no chore name supplied, use assigned chore
             const userAssignedChores = yield db.getChoresAssignedToUser(message.author);
             if (userAssignedChores.length === 0) {
                 return [
                     {
                         kind: 'SendMessage',
                         message: {
-                            text: `${(0, chat_2.tagUser)(message.author)} you have no chores assigned`,
+                            text: `ℹ️ ${(0, chat_2.tagUser)(message.author)} you have no chores assigned`,
                             author: chat_1.ChoresBotUser
                         }
                     }
@@ -322,13 +430,11 @@ Note: If a chore matching the name you supplied can't be found then the closest 
             chore = userAssignedChores[0];
         }
         else {
-            // check if chore exists, maybe it was misspelled
             try {
                 chore = yield db.getChoreByName(choreName);
             }
             catch (e) {
                 (0, log_1.default)(`error retrieving chore "${choreName}": ${e}`, config);
-                // don't re-throw so user gets more specific message
             }
             if (chore === undefined) {
                 return [
@@ -351,7 +457,7 @@ Note: If a chore matching the name you supplied can't be found then the closest 
 };
 exports.OptInCommand = {
     callsigns: ['!opt-in'],
-    summary: 'Add yourself as a user of ChoresBot allowing chores to be assigned to you.',
+    summary: '🙋 Add yourself to ChoresBot so chores can be assigned to you.',
     handler: (message) => __awaiter(void 0, void 0, void 0, function* () {
         return [
             {
@@ -361,7 +467,7 @@ exports.OptInCommand = {
             {
                 kind: 'SendMessage',
                 message: {
-                    text: `${(0, chat_2.tagUser)(message.author)} thank you for opting in to ChoresBot!!! ✨💚`,
+                    text: `🎉 ${(0, chat_2.tagUser)(message.author)} Welcome to ChoresBot! You'll now be included in chore assignments. ✨💚`,
                     author: chat_1.ChoresBotUser
                 }
             }
@@ -370,7 +476,7 @@ exports.OptInCommand = {
 };
 exports.OptOutCommand = {
     callsigns: ['!opt-out'],
-    summary: 'Remove yourself as a user of ChoresBot. You will no longer be assigned chores.',
+    summary: '👋 Remove yourself from ChoresBot. You will no longer be assigned chores.',
     handler: (message, config, db) => __awaiter(void 0, void 0, void 0, function* () {
         const actions = [];
         const userAssignedChores = yield db.getChoresAssignedToUser(message.author);
@@ -386,7 +492,7 @@ exports.OptOutCommand = {
         }, {
             kind: 'SendMessage',
             message: {
-                text: `${(0, chat_2.tagUser)(message.author)} successfully opted-out, you should no longer be assigned any chores 👋`,
+                text: `👋 ${(0, chat_2.tagUser)(message.author)} You've been removed from ChoresBot. See you around! 🌟`,
                 author: chat_1.ChoresBotUser
             }
         });
@@ -395,21 +501,20 @@ exports.OptOutCommand = {
 };
 exports.HelpCommand = {
     callsigns: ['!help'],
-    summary: 'Get information on how to use a command',
-    helpText: `!help command
+    summary: '❓ Get help on how to use a command',
+    helpText: `!help [command]
 
 command:
     Optional.
-    The name of the command you would like help with. If none is provided then a summary of all commands will be given.
-    Note: If the command name isn't found then the closest match will be used`,
+    The name of the command you would like help with. If none is provided a summary of all commands will be given.`,
     handler: (message, config, db, commandName) => __awaiter(void 0, void 0, void 0, function* () {
         if (commandName.length === 0) {
-            const helpSummary = exports.AllCommands.map((command) => `${defaultCallsign(command)} - ${command.summary}`).join('\n');
+            const helpSummary = exports.AllCommands.map((command) => `${defaultCallsign(command)} — ${command.summary}`).join('\n');
             return [
                 {
                     kind: 'SendMessage',
                     message: {
-                        text: helpSummary,
+                        text: `${(0, chat_2.bold)('ChoresBot Commands')} 🤖\n\n${helpSummary}`,
                         author: chat_1.ChoresBotUser
                     }
                 }
@@ -438,9 +543,11 @@ command:
 };
 exports.AllCommands = [
     exports.PingCommand,
+    exports.AssignCommand,
     exports.RequestCommand,
     exports.SkipCommand,
     exports.CompleteCommand,
+    exports.StatusCommand,
     exports.AddCommand,
     exports.DeleteCommand,
     exports.ListCommand,
@@ -453,7 +560,6 @@ exports.AllCommands = [
 function completeAssignedChore(user, db) {
     return __awaiter(this, void 0, void 0, function* () {
         const userAssignedChores = yield db.getChoresAssignedToUser(user);
-        // check if the user has a chore assigned to complete
         if (userAssignedChores.length === 0) {
             return [
                 {
@@ -467,7 +573,9 @@ function completeAssignedChore(user, db) {
             ];
         }
         const completedChore = (0, chores_1.completeChore)(userAssignedChores[0]);
-        return (0, actions_1.completeChoreActions)(completedChore, user);
+        const completeActions = (0, actions_1.completeChoreActions)(completedChore, user);
+        const reassignActions = yield autoReassignAfterCompletion(userAssignedChores[0], user, db);
+        return [...completeActions, ...reassignActions];
     });
 }
 function completeChoreByName(choreName, completedBy, db) {
@@ -482,7 +590,34 @@ function completeChoreByName(choreName, completedBy, db) {
             ];
         }
         const completedChore = (0, chores_1.completeChore)(chore);
-        return (0, actions_1.completeChoreActions)(completedChore, completedBy);
+        const completeActions = (0, actions_1.completeChoreActions)(completedChore, completedBy);
+        const reassignActions = yield autoReassignAfterCompletion(chore, completedBy, db);
+        return [...completeActions, ...reassignActions];
+    });
+}
+// After a chore is completed, immediately assign it to the next eligible member (round-robin)
+function autoReassignAfterCompletion(originalChore, completedBy, db) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Only auto-reassign recurring chores (Once chores are done forever)
+        if (originalChore.frequency.kind === 'Once') {
+            return [];
+        }
+        // Get users who don't currently have a chore assigned
+        // (completedBy still has this chore in DB since actions haven't run yet, so they're excluded)
+        const assignableUsers = yield db.getAssignableUsersInOrderOfRecentCompletion();
+        assignableUsers.reverse(); // least recently done first
+        // Also exclude the member who just completed (in case they have no other chores)
+        const candidates = assignableUsers.filter((u) => u.id !== completedBy.id);
+        if (candidates.length === 0) {
+            return [];
+        }
+        // The cleaned chore has no assignment and no skips — everyone is eligible
+        const cleanedChore = (0, chores_1.completeChore)(originalChore);
+        const nextUser = (0, chores_1.findUserForChore)(cleanedChore, candidates);
+        if (nextUser === undefined) {
+            return [];
+        }
+        return (0, actions_1.assignChoreActions)(cleanedChore, nextUser);
     });
 }
 // --- Utility ---

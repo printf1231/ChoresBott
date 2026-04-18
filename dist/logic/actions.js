@@ -15,7 +15,7 @@ function completeChoreActions(completedChore, user) {
         {
             kind: 'SendMessage',
             message: {
-                text: `✅ the chore "${completedChore.name}" has been successfully completed`,
+                text: `✅ Great work ${(0, chat_2.tagUser)(user)}! The chore "${completedChore.name}" has been completed! 🌟`,
                 author: chat_1.ChoresBotUser
             }
         }
@@ -31,7 +31,7 @@ function assignChoreActions(chore, user) {
         {
             kind: 'SendMessage',
             message: {
-                text: `📋 ${(0, chat_2.tagUser)(user)} please do the chore: "${chore.name}"`,
+                text: `📋 Hey ${(0, chat_2.tagUser)(user)}! You've been assigned: "${chore.name}" 💪 You've got this!`,
                 author: chat_1.ChoresBotUser
             }
         }
@@ -43,7 +43,7 @@ function didYouMeanMessage(choreName, closestMatch, command, taggedUser) {
         return {
             kind: 'SendMessage',
             message: {
-                text: `❓ ${(0, chat_2.tagUser)(taggedUser)} Unable to find chore "${choreName}".`,
+                text: `❓ ${(0, chat_2.tagUser)(taggedUser)} Unable to find a chore named "${choreName}".`,
                 author: chat_1.ChoresBotUser
             }
         };
@@ -65,15 +65,13 @@ function reminderAction(assignedChores) {
         if (chore.assigned === false) {
             throw new Error(`unassigned chore provided to reminderAction: ${chore.name}`);
         }
-        return `${chore.name} - ${(0, chat_2.tagUser)(chore.assigned)}`;
+        return `❗ "${chore.name}" — ${(0, chat_2.tagUser)(chore.assigned)}`;
     });
     return [
         {
             kind: 'SendMessage',
             message: {
-                text: `⏳ ${(0, chat_2.bold)('END OF DAY REMINDER')} ⏳
-The following chores have been assigned but not completed:
-${reminderList.join('\n')}`,
+                text: `⏰ ${(0, chat_2.bold)('END OF DAY REMINDER')} ⏰\nThe following chores are still uncompleted:\n${reminderList.join('\n')}\n\nPlease complete them or use ${(0, chat_2.inlineCode)('!skip')} if needed! 🙏`,
                 author: chat_1.ChoresBotUser
             }
         }

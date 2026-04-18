@@ -16,11 +16,12 @@ export function completeChoreActions(
             chore: completedChore,
             user
         },
-
         {
             kind: 'SendMessage',
             message: {
-                text: `✅ the chore "${completedChore.name}" has been successfully completed`,
+                text: `✅ Great work ${tagUser(user)}! The chore "${
+                    completedChore.name
+                }" has been completed! 🌟`,
                 author: ChoresBotUser
             }
         }
@@ -33,13 +34,12 @@ export function assignChoreActions(chore: Chore, user: User): Action[] {
             kind: 'ModifyChore',
             chore: assignChore(chore, user)
         },
-
         {
             kind: 'SendMessage',
             message: {
-                text: `📋 ${tagUser(user)} please do the chore: "${
+                text: `📋 Hey ${tagUser(user)}! You've been assigned: "${
                     chore.name
-                }"`,
+                }" 💪 You've got this!`,
                 author: ChoresBotUser
             }
         }
@@ -58,7 +58,7 @@ export function didYouMeanMessage(
             message: {
                 text: `❓ ${tagUser(
                     taggedUser
-                )} Unable to find chore "${choreName}".`,
+                )} Unable to find a chore named "${choreName}".`,
                 author: ChoresBotUser
             }
         }
@@ -88,16 +88,20 @@ export function reminderAction(assignedChores: Chore[]): Action[] {
                 `unassigned chore provided to reminderAction: ${chore.name}`
             )
         }
-        return `${chore.name} - ${tagUser(chore.assigned)}`
+        return `❗ "${chore.name}" — ${tagUser(chore.assigned)}`
     })
 
     return [
         {
             kind: 'SendMessage',
             message: {
-                text: `⏳ ${bold('END OF DAY REMINDER')} ⏳
-The following chores have been assigned but not completed:
-${reminderList.join('\n')}`,
+                text: `⏰ ${bold(
+                    'END OF DAY REMINDER'
+                )} ⏰\nThe following chores are still uncompleted:\n${reminderList.join(
+                    '\n'
+                )}\n\nPlease complete them or use ${inlineCode(
+                    '!skip'
+                )} if needed! 🙏`,
                 author: ChoresBotUser
             }
         }
